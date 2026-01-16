@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Equatorial Trechos - MapLibre</title>
+    <meta property="og:description" content="Uses the PMTiles plugin and protocol to present a map." />
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css' />
+    <script src='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js'></script>
+    <script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        html, body, #map { height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // --- PASSO A: Configurar o Protocolo PMTiles ---
+        // Isso ensina o MapLibre a entender URLs que começam com "pmtiles://"
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        // --- PASSO B: Criar o Mapa ---
+        const map = new maplibregl.Map({
+            container: 'map',
+            zoom: 14,
+            center: [-51.2177, -30.0346], // Porto Alegre
+            style: {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '&copy; OpenStreetMap Contributors'
+                    },
+                    'tp': {
+                        type: 'vector',
+                        url: 'pmtiles://ceee_tp.pmtiles'
+                    },
+                    'ts': {
+                        type: 'vector',
+                        url: 'pmtiles://ceee_ts.pmtiles'
+                    },
+                    'rm':{
+                        type: 'vector',
+                        url: 'pmtiles://ceee_rm.pmtiles'
+                    }
+                },
+                layers: [
+                    {
+                        id: 'osm',
+                        type: 'raster',
+                        source: 'osm',
+                    },
+                    {
+                        id: 'tp_layer',
+                        type: 'line',
+                        source: 'tp',
+                        'source-layer': 'Trechos Primários',
+                        paint: {
+                            'line-color': 'black'
+                        }
+                    },
+                    {
+                        id: 'ts_layer',
+                        type: 'line',
+                        source: 'ts',
+                        'source-layer': 'Trechos Secundarios',
+                        paint: {
+                            'line-color': 'red'
+                        }
+                    },
+                    {
+                        id: 'rm_layer',
+                        type: 'line',
+                        source: 'rm',
+                        'source-layer': 'Ramais',
+                        paint: {
+                            'line-color': 'green'
+                        }
+                    }
+                ]
+            },
+            
+        });
+    </script>
+</body>
+</html>
