@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/ico" href="favicon.ico" />
+    <title>Equatorial Qualidade</title>
+    <meta property="og:description" content="Identificação de Deslocamentos e Vazio nos Trechos" />
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css' />
+    <script src='https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js'></script>
+    <script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        html, body, #map { height: 100%; }
+        
+        /* Estilo opcional para o link dentro do popup */
+        .maplibregl-popup-content a {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .maplibregl-popup-content a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // --- PASSO A: Configurar o Protocolo PMTiles ---
+        // Isso ensina o MapLibre a entender URLs que começam com "pmtiles://"
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        // --- PASSO B: Criar o Mapa ---
+        const map = new maplibregl.Map({
+            container: 'map',
+            zoom: 6,
+            center: [-51.2177, -30.0346], // Porto Alegre
+            style: {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '&copy; OpenStreetMap Contributors'
+                    },
+                    'tp': {
+                        type: 'vector',
+                        url: 'pmtiles://db/ceee_tp.pmtiles'
+                    },
+                    'ts': {
+                        type: 'vector',
+                        url: 'pmtiles://db/ceee_ts.pmtiles'
+                    },
+                    'rm':{
+                        type: 'vector',
+                        url: 'pmtiles://db/ceee_rm.pmtiles'
+                    },
+                    'erros': {
+                        type: 'geojson',
+                        data: 'db/desloc_vazios.geojson' 
+                    }
+                },
+                layers: [
+                    {
+                        id: 'osm',
+                        type: 'raster',
+                        source: 'osm',
+                    },
+                    {
+                        id: 'tp_layer',
+                        type: 'line',
+                        source: 'tp',
+                        'source-layer': 'Trechos Primários',
+                        paint: {
+                            'line-color': 'black'
+                        }
+                    },
+                    {
+                        id: 'ts_layer',
+                        type: 'line',
+                        source: 'ts',
+                        'source-layer': 'Trechos Secundarios',
+                        paint: {
+                            'line-color': 'red'
+                        }
+                    },
+                    {
+                        id: 'rm_layer',
+                        type: 'line',
+                        source: 'rm',
+                        'source-layer': 'Ramais',
+                        paint: {
+                            'line-color': 'green'
+                        }
+                    },
+                    {
+                        id: 'erros_layer',
+                        type: 'circle',
+                        source: 'erros',
+                        paint: {
+                            'circle-radius': 6,
+                            'circle-stroke-width': 1,
+                            'circle-stroke-color': '#fff',
+                            'circle-color': [
+                                'match',
+                                ['get', 'classe'], // Nome da propriedade no seu GeoJSON (ex: "classe", "class", "tipo")
+                                1, 'Gold',         // Se for 1 -> Gold
+                                2, 'LimeGreen',    // Se for 2 -> LimeGreen
+                                /* default */ '#ccc' // Cor caso não seja nem 1 nem 2
+                            ]
+                        }
+                    }
+                ]
+            },
+            
+        });
+        map.on('click', 'erros_layer', (e) => {
+            // Pega as coordenadas e as propriedades do ponto clicado
+            const coordinates = e.features[0].geometry.coordinates.slice();
+            const feature = e.features[0];
+            const props = feature.properties;
+            const url = 'locais/' + props.nome + '.html'; // Assume que a prop 'nome' é a URL
+            
+            const lon = coordinates[0].toFixed(5);
+            const lat = coordinates[1].toFixed(5);
+
+            let textoTipo = '';
+            if (props.classe === 1) {
+                textoTipo = 'Deslocamento';
+            } else if (props.classe === 2) {
+                textoTipo = 'Vazio';
+            }
+
+            // Garante que o popup apareça sobre o ponto, mesmo com zoom distante
+            while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+                coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+            }
+
+            // Cria o conteúdo HTML do Popup
+            // target="_blank" faz abrir em nova aba
+            const popupContent = `
+                <a href="${url}" target="_blank">${textoTipo}</a></br>
+                <small style="color: #666; font-size: 11px;">(${lat}, ${lon})</small>
+            `;
+
+            new maplibregl.Popup()
+                .setLngLat(coordinates)
+                .setHTML(popupContent)
+                .addTo(map);
+        });
+
+        // Muda o cursor para "mãozinha" ao passar o mouse sobre o ponto
+        map.on('mouseenter', 'erros_layer', () => {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+
+        // Volta o cursor ao normal ao sair de cima do ponto
+        map.on('mouseleave', 'erros_layer', () => {
+            map.getCanvas().style.cursor = '';
+        });
+    </script>
+</body>
+</html>
