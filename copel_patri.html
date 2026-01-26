@@ -13,88 +13,148 @@
     <style>
         body { margin: 0; padding: 0; }
         html, body, #map { height: 100%; }
+        /* Auth overlay */
+        #auth-overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.75); z-index:9999 }
+        #auth-box{ background:#fff; padding:18px; border-radius:8px; width:320px; box-shadow:0 8px 24px rgba(0,0,0,.35); text-align:center }
+        #auth-box input{ width:90%; padding:8px 10px; margin-top:8px; font-size:15px }
+        #auth-box button{ margin-top:10px; padding:8px 12px; font-size:15px }
+        #auth-error{ color:#b00; margin-top:8px; font-size:13px; display:none }
     </style>
 </head>
 <body>
+    <div id="auth-overlay" aria-hidden="false">
+        <div id="auth-box" role="dialog" aria-modal="true">
+            <div><strong>Protegido por senha</strong></div>
+            <div style="font-size:13px;color:#444;margin-top:6px">Insira a senha para acessar o mapa</div>
+            <input id="auth-pass" type="password" placeholder="Senha" autocomplete="off" />
+            <button id="auth-ok">Entrar</button>
+            <div id="auth-error">Senha incorreta</div>
+        </div>
+    </div>
     <div id="map"></div>
     <script>
+        // --- CONFIGURE AQUI ---
+        // Substitua este valor pelo hash SHA-256 hexadecimal da senha desejada.
+        // Ex: gere o hash no console do navegador com: await sha256Hex('suaSenha')
+        const STORED_HASH_HEX = 'da4d451ab204b758ae6b5be19ac1905e56e3415ab429d1ee500c5c838957c8cd';
+
+        async function sha256Hex(text){
+            const enc = new TextEncoder();
+            const data = enc.encode(text);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2,'0')).join('');
+        }
+
+        // Authentication UI wiring
+        (function(){
+            const overlay = document.getElementById('auth-overlay');
+            const passInput = document.getElementById('auth-pass');
+            const okBtn = document.getElementById('auth-ok');
+            const err = document.getElementById('auth-error');
+
+            async function tryUnlock(){
+                const val = passInput.value || '';
+                const h = await sha256Hex(val);
+                if (STORED_HASH_HEX && h === STORED_HASH_HEX.toLowerCase()){
+                    overlay.style.display = 'none';
+                    overlay.setAttribute('aria-hidden','true');
+                    err.style.display = 'none';
+                    initMap();
+                } else {
+                    err.style.display = 'block';
+                }
+            }
+
+            okBtn.addEventListener('click', tryUnlock);
+            passInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') tryUnlock(); });
+
+            // If no stored hash provided, show a helper to compute hash in console
+            if (!STORED_HASH_HEX){
+                console.warn('STORED_HASH_HEX vazio. Abra o console e rode: await sha256Hex("suaSenha")');
+            }
+        })();
+
+        // initMap is called only after successful authentication
         let protocol = new pmtiles.Protocol();
         maplibregl.addProtocol("pmtiles", protocol.tile);
 
-        // --- PASSO B: Criar o Mapa ---
-        const map = new maplibregl.Map({
-            container: 'map',
-            zoom: 6,
-             // Centro do Paraná
-            center: [-51.9292, -24.9926],
-            style: {
-                version: 8,
-                sources: {
-                    'osm': {
-                        type: 'raster',
-                        tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
-                        tileSize: 256,
-                        attribution: '&copy; OpenStreetMap Contributors'
-                    },
-                    'patri': {
-                        type: 'vector',
-                        url: 'pmtiles://db/copel_patri.pmtiles'
-                    }
-                },
-                layers: [
-                    {
-                        id: 'osm',
-                        type: 'raster',
-                        source: 'osm',
-                    },
-                    {
-                        id: 'patri_layer',
-                        type: 'heatmap',
-                        source: 'patri',
-                        'source-layer': 'Patrimonio',
-                        paint: {
-                            "heatmap-weight": [
-                                "interpolate",
-                                ["linear"],
-                                ["coalesce", ["get", "point_count"], 1],
-                                0, 0,
-                                1, 0.1,
-                                500, 1
-                            ],
-                            // Aumenta a intensidade do heatmap conforme o zoom aumenta
-                            "heatmap-intensity": [
-                                "interpolate",
-                                ["linear"],
-                                ["zoom"],
-                                0, 1,
-                                9, 3
-                            ],
-                            // Define as cores do gradiente
-                            "heatmap-color": [
-                                "interpolate",
-                                ["linear"],
-                                ["heatmap-density"],
-                                0, "rgba(33,102,172,0)",
-                                0.2, "rgb(103,169,207)",
-                                0.4, "rgb(209,229,240)",
-                                0.6, "rgb(253,219,199)",
-                                0.8, "rgb(239,138,98)",
-                                1, "rgb(178,24,43)"
-                            ],
-                            // Ajusta o raio dos pontos conforme o zoom
-                            "heatmap-radius": [
-                                "interpolate",
-                                ["linear"],
-                                ["zoom"],
-                                0, 2,
-                                9, 20
-                            ],
-                            "heatmap-opacity": 0.6
+        function initMap(){
+            // --- PASSO B: Criar o Mapa ---
+            const map = new maplibregl.Map({
+                container: 'map',
+                zoom: 6,
+                 // Centro do Paraná
+                center: [-51.9292, -24.9926],
+                style: {
+                    version: 8,
+                    sources: {
+                        'osm': {
+                            type: 'raster',
+                            tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: '&copy; OpenStreetMap Contributors'
+                        },
+                        'patri': {
+                            type: 'vector',
+                            url: 'pmtiles://db/copel_patri.pmtiles'
                         }
-                    }
-                ]
-            }
-        });
+                    },
+                    layers: [
+                        {
+                            id: 'osm',
+                            type: 'raster',
+                            source: 'osm',
+                        },
+                        {
+                            id: 'patri_layer',
+                            type: 'heatmap',
+                            source: 'patri',
+                            'source-layer': 'Patrimonio',
+                            paint: {
+                                "heatmap-weight": [
+                                    "interpolate",
+                                    ["linear"],
+                                    ["coalesce", ["get", "point_count"], 1],
+                                    0, 0,
+                                    1, 0.1,
+                                    500, 1
+                                ],
+                                // Aumenta a intensidade do heatmap conforme o zoom aumenta
+                                "heatmap-intensity": [
+                                    "interpolate",
+                                    ["linear"],
+                                    ["zoom"],
+                                    0, 1,
+                                    9, 3
+                                ],
+                                // Define as cores do gradiente
+                                "heatmap-color": [
+                                    "interpolate",
+                                    ["linear"],
+                                    ["heatmap-density"],
+                                    0, "rgba(33,102,172,0)",
+                                    0.2, "rgb(103,169,207)",
+                                    0.4, "rgb(209,229,240)",
+                                    0.6, "rgb(253,219,199)",
+                                    0.8, "rgb(239,138,98)",
+                                    1, "rgb(178,24,43)"
+                                ],
+                                // Ajusta o raio dos pontos conforme o zoom
+                                "heatmap-radius": [
+                                    "interpolate",
+                                    ["linear"],
+                                    ["zoom"],
+                                    0, 2,
+                                    9, 20
+                                ],
+                                "heatmap-opacity": 0.6
+                            }
+                        }
+                    ]
+                }
+            });
+        }
     </script>
 </body>
 </html>
