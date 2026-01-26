@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Galeria - pasta img</title>
+    <style>
+        body { font-family: system-ui,Segoe UI,Roboto,Helvetica,Arial; margin:20px; background:#f7f7f7; color:#111 }
+        h1 { margin:0 0 12px 0 }
+        #grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap:14px }
+        figure { margin:0; background:#fff; padding:8px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); text-align:center }
+        img { max-width:100%; height:auto; object-fit:contain; display:block; margin:0 auto 8px; cursor:zoom-in }
+        .overlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.85); z-index:9999 }
+        .overlay.show { display:flex }
+        .overlay img { max-width:calc(100% - 40px); max-height:calc(100% - 40px); object-fit:contain; box-shadow:0 8px 30px rgba(0,0,0,.6); border-radius:6px }
+        .overlay .hint { position:fixed; top:18px; right:20px; color:#fff; font-size:13px; opacity:.9 }
+        figcaption { font-size:13px; word-break:break-all; color:#333 }
+        .note { color:#666; margin-bottom:10px }
+        .error { color:#b00 }
+    </style>
+</head>
+<body>
+    <h1>Imagens da pasta "img"</h1>
+    <div class="note">Se estiver abrindo localmente, sirva via servidor (ex.: Live Server) para listar a pasta.</div>
+    <div id="grid" aria-live="polite">Carregando imagens…</div>
+    <script>
+        (async function(){
+            const grid = document.getElementById('grid');
+            grid.textContent = 'Carregando imagens…';
+            try {
+                const base = new URL('./img/', location.href);
+                const res = await fetch(base.href);
+                if (!res.ok) throw new Error('failed');
+                const text = await res.text();
+                const doc = new DOMParser().parseFromString(text, 'text/html');
+                const hrefs = Array.from(doc.querySelectorAll('a'))
+                    .map(a => a.getAttribute('href'))
+                    .filter(Boolean)
+                    .filter(h => /\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?.*)?(#.*)?$/i.test(h));
+                if (!hrefs.length) {
+                    grid.textContent = 'Nenhuma imagem encontrada na pasta img.';
+                    return;
+                }
+                grid.innerHTML = '';
+                hrefs.forEach(h => {
+                    const url = new URL(h, base).href;
+                    const name = decodeURIComponent((new URL(h, base).pathname.split('/').pop()||h));
+                    const fig = document.createElement('figure');
+                    const im = document.createElement('img');
+                    im.src = url;
+                    im.alt = name;
+                    im.loading = 'lazy';
+                    im.addEventListener('click', () => openOverlay(url, name));
+                    const cap = document.createElement('figcaption');
+                    cap.textContent = name;
+                    fig.appendChild(im);
+                    fig.appendChild(cap);
+                    grid.appendChild(fig);
+                });
+
+                // overlay element for full-resolution viewing
+                const overlay = document.createElement('div');
+                overlay.className = 'overlay';
+                overlay.tabIndex = -1;
+                const overlayImg = document.createElement('img');
+                const hint = document.createElement('div');
+                hint.className = 'hint';
+                hint.textContent = 'Clique ou tecla Esc para fechar';
+                overlay.appendChild(overlayImg);
+                overlay.appendChild(hint);
+                document.body.appendChild(overlay);
+
+                function openOverlay(src, alt){
+                    overlayImg.src = src;
+                    overlayImg.alt = alt || '';
+                    overlay.classList.add('show');
+                    document.body.style.overflow = 'hidden';
+                    overlay.focus();
+                }
+
+                function closeOverlay(){
+                    overlay.classList.remove('show');
+                    overlayImg.src = '';
+                    document.body.style.overflow = '';
+                }
+
+                overlay.addEventListener('click', (e)=>{
+                    if (e.target === overlay || e.target === overlayImg) closeOverlay();
+                });
+                window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closeOverlay(); });
+            } catch (e) {
+                grid.innerHTML = '<div class="error">Não foi possível listar a pasta img. ' +
+                                                 'Certifique-se de servir o arquivo via servidor (ex.: Live Server).</div>';
+                console.error(e);
+            }
+        })();
+    </script>
+</body>
+</html>
