@@ -26,38 +26,49 @@
         (async function(){
             const grid = document.getElementById('grid');
             grid.textContent = 'Carregando imagens…';
+            
             try {
-                const base = new URL('./img/', location.href);
-                const res = await fetch(base.href);
-                if (!res.ok) throw new Error('failed');
-                const text = await res.text();
-                const doc = new DOMParser().parseFromString(text, 'text/html');
-                const hrefs = Array.from(doc.querySelectorAll('a'))
-                    .map(a => a.getAttribute('href'))
-                    .filter(Boolean)
-                    .filter(h => /\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?.*)?(#.*)?$/i.test(h));
-                if (!hrefs.length) {
-                    grid.textContent = 'Nenhuma imagem encontrada na pasta img.';
+                // 1. Define o caminho base e o arquivo JSON
+                const folderPath = './img/';
+                const jsonUrl = folderPath + 'lista.json'; // Lê o arquivo que criamos
+
+                // 2. Faz o fetch do JSON
+                const res = await fetch(jsonUrl);
+                if (!res.ok) throw new Error('Não foi possível carregar a lista de imagens (lista.json)');
+                
+                // 3. Converte a resposta em um Array
+                const imageList = await res.json();
+
+                if (!imageList.length) {
+                    grid.textContent = 'Nenhuma imagem listada no JSON.';
                     return;
                 }
+
                 grid.innerHTML = '';
-                hrefs.forEach(h => {
-                    const url = new URL(h, base).href;
-                    const name = decodeURIComponent((new URL(h, base).pathname.split('/').pop()||h));
+                
+                // 4. Itera sobre a lista do JSON
+                imageList.forEach(filename => {
+                    const url = folderPath + filename;
+                    // Remove a extensão para criar um nome bonito, se quiser
+                    const name = filename; 
+
                     const fig = document.createElement('figure');
                     const im = document.createElement('img');
                     im.src = url;
                     im.alt = name;
                     im.loading = 'lazy';
                     im.addEventListener('click', () => openOverlay(url, name));
+                    
                     const cap = document.createElement('figcaption');
-                    cap.textContent = name;
+                    cap.textContent = name; // ou formatar o nome se preferir
+                    
                     fig.appendChild(im);
                     fig.appendChild(cap);
                     grid.appendChild(fig);
                 });
 
-                // overlay element for full-resolution viewing
+                // ... (O restante do código do Overlay permanece IDÊNTICO ao seu original) ...
+                
                 const overlay = document.createElement('div');
                 overlay.className = 'overlay';
                 overlay.tabIndex = -1;
@@ -87,9 +98,9 @@
                     if (e.target === overlay || e.target === overlayImg) closeOverlay();
                 });
                 window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closeOverlay(); });
+
             } catch (e) {
-                grid.innerHTML = '<div class="error">Não foi possível listar a pasta img. ' +
-                                                 'Certifique-se de servir o arquivo via servidor (ex.: Live Server).</div>';
+                grid.innerHTML = '<div class="error">Erro: ' + e.message + '</div>';
                 console.error(e);
             }
         })();
